@@ -8,7 +8,15 @@ var isprint = function( c ) {
     return (c > 0x1f && c < 0x7f);
 }
 
-exports.logHex = function( data ) {
+var log = module.exports = function() {
+    console.log.apply(null, arguments);
+}
+
+log.warn = function() {
+    console.warn.apply(null, arguments);
+}
+
+log.logHex = function( data ) {
     var line = new Buffer(BP_LEN);
     for (var i = 0; i < data.length; i++) {
         var n = i % 16;
