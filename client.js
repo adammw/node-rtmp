@@ -33,7 +33,6 @@ RTMPClient.prototype.onData = function(data) {
 	log.logHex(data);
 
 	if (!this.message || this.message.bytesRemaining == 0) {
-		console.log("new message");
 		this.message = new RTMPMessage(data);
 		this.message.on('complete', this.onMessage.bind(this));
 	}
@@ -43,7 +42,18 @@ RTMPClient.prototype.onData = function(data) {
 
 RTMPClient.prototype.onMessage = function() {
 	this.emit("message", this.message);
-	// TODO: parse AMF
+
+	if (this.message.messageHeader.messageType == RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE) {
+		switch (this.message.data.commandName) {
+			case "_error":
+				this.emit("error", this.message.data.arguments);
+				break;
+			case "close":
+				this.socket.end();
+				this.emit("close");
+				break;
+		}
+	}
 }
 
 //TODO: update to chunk/message system
