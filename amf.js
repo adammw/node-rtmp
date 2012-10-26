@@ -1,27 +1,36 @@
+function defineConstant(obj, name, value) {
+    obj.__defineGetter__(name, function() { return value; });
+}
+function defineConstants(obj, dict) {
+    for (key in dict)
+        defineConstant(obj, key, dict[key]);
+}
+
 var AMF = module.exports = function( buf ) {
     this.buf = buf;
 };
 
-/* Constants */
-AMF.AMF_NUMBER = 0;
-AMF.AMF_BOOLEAN = 1;
-AMF.AMF_STRING = 2;
-AMF.AMF_OBJECT = 3;
-AMF.AMF_MOVIECLIP = 4;
-AMF.AMF_NULL = 5;
-AMF.AMF_UNDEFINED = 6;
-AMF.AMF_REFERENCE = 7;
-AMF.AMF_ECMA_ARRAY = 8;
-AMF.AMF_OBJECT_END = 9;
-AMF.AMF_STRICT_ARRAY = 10;
-AMF.AMF_DATE = 11;
-AMF.AMF_LONG_STRING = 12;
-AMF.AMF_UNSUPPORTED = 13;
-AMF.AMF_RECORDSET = 14;
-AMF.AMF_XML_DOC = 15;
-AMF.AMF_TYPED_OBJECT = 16;
-AMF.AMF_AVMPLUS = 17;
-AMF.AMF_INVALID = 0xff;
+defineConstants({
+    AMF_NUMBER:         0,
+    AMF_BOOLEAN:        1,
+    AMF_STRING:         2,
+    AMF_OBJECT:         3,
+    AMF_MOVIECLIP:      4,
+    AMF_NULL:           5,
+    AMF_UNDEFINED:      6,
+    AMF_REFERENCE:      7,
+    AMF_ECMA_ARRAY:     8,
+    AMF_OBJECT_END:     9,
+    AMF_STRICT_ARRAY:   10,
+    AMF_DATE:           11,
+    AMF_LONG_STRING:    12,
+    AMF_UNSUPPORTED:    13,
+    AMF_RECORDSET:      14,
+    AMF_XML_DOC:        15,
+    AMF_TYPED_OBJECT:   16,
+    AMF_AVMPLUS:        17,
+    AMF_INVALID:        0xff
+})
 
 AMF.prototype.writeInt16 = function( value, offset ) {
     offset = offset || 0;
