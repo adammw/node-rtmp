@@ -129,7 +129,7 @@ RTMPChunk.prototype.__defineGetter__('chunkData', function() {
 	// message needs to know how many bytes (of payload) are remaining
 	//
 	//return this.buffer.slice(this.chunkDataOffset,???);
-	return this.buffer.slice(this.chunkDataOffset,this.chunkLength)
+	return this.buffer.slice(this.chunkDataOffset,this.chunkDataOffset+this.chunkLength)
 });
 RTMPChunk.prototype.__defineGetter__('byteLength', function() {
 	return this.chunkDataOffset + this.chunkLength;
