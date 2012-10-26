@@ -4,6 +4,7 @@ var net = require('net'),
 	os = require('os');
 
 var RTMPHandshake = require('./handshake');
+var RTMPMessage = require('./message');
 
 var log = require('./log');
 
@@ -28,14 +29,37 @@ RTMPClient.prototype.onSocketConnect = function() {
 };
 
 RTMPClient.prototype.onData = function(data) {
-	log("recieved RTMP data...");
+	log("recieved RTMP data...", "(" + data.length + " bytes)");
 	log.logHex(data);
+
+	if (!this.message || this.message.bytesRemaining == 0) {
+		console.log("new message");
+		this.message = new RTMPMessage(data);
+		this.message.on('complete', this.onMessage.bind(this));
+	}
+	this.message.parseData(data);
 }
 
+
+RTMPClient.prototype.onMessage = function() {
+	this.emit("message", this.message);
+}
+
+//TODO: update to chunk/message system
 RTMPClient.prototype.sendPacket = function(packet) {
+	// If we aren't handshaken, then defer sending until we have
+	if (!this.handshake || this.handshake.state != RTMPHandshake.STATE_HANDSHAKE_DONE) {
+		this.on('connect', (function(){
+			this.sendPacket(packet);
+		}).bind(this));
+		return;
+	}
+
 	var chunks = packet.serialize();
     this.socket.setNoDelay(true);
     log("sending RTMP packet...");
+
+    //TODO: this is ugly.. fix it
     for (var i = 1; i < chunks.length; i+= 2) {
         log.logHex(chunks[i-1]);
         log.logHex(chunks[i]);
