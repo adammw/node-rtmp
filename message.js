@@ -1,5 +1,6 @@
 var events = require('events'),
 	util = require('util');
+var AMF = require('./amf')
 var RTMPChunk = require('./chunk');
 
 function defineConstant(obj, name, value) {
@@ -19,20 +20,20 @@ var RTMPMessage = module.exports = function() {
 }
 util.inherits(RTMPMessage, events.EventEmitter);
 defineConstants(RTMPMessage, {
-	RTMP_MESSAGE_TYPE_CHUNK_SIZE:         0x01;
-	RTMP_MESSAGE_TYPE_BYTES_READ_REPORT:  0x03;
-	RTMP_MESSAGE_TYPE_CONTROL:            0x04;
-	RTMP_MESSAGE_TYPE_SERVER_BW:          0x05;
-	RTMP_MESSAGE_TYPE_CLIENT_BW:          0x06;
-	RTMP_MESSAGE_TYPE_AUDIO:              0x08;
-	RTMP_MESSAGE_TYPE_VIDEO:              0x09;
-	RTMP_MESSAGE_TYPE_FLEX_STREAM_SEND:   0x0F;
-	RTMP_MESSAGE_TYPE_FLEX_SHARED_OBJECT: 0x10;
-	RTMP_MESSAGE_TYPE_FLEX_MESSAGE:       0x11;
-	RTMP_MESSAGE_TYPE_INFO:               0x12;
-	RTMP_MESSAGE_TYPE_SHARED_OBJECT:      0x13;
-	RTMP_MESSAGE_TYPE_INVOKE:             0x14;
-	RTMP_MESSAGE_TYPE_FLASH_VIDEO:        0x16;
+	RTMP_MESSAGE_TYPE_CHUNK_SIZE:         0x01,
+	RTMP_MESSAGE_TYPE_BYTES_READ_REPORT:  0x03,
+	RTMP_MESSAGE_TYPE_CONTROL:            0x04,
+	RTMP_MESSAGE_TYPE_SERVER_BW:          0x05,
+	RTMP_MESSAGE_TYPE_CLIENT_BW:          0x06,
+	RTMP_MESSAGE_TYPE_AUDIO:              0x08,
+	RTMP_MESSAGE_TYPE_VIDEO:              0x09,
+	RTMP_MESSAGE_TYPE_FLEX_STREAM_SEND:   0x0F,
+	RTMP_MESSAGE_TYPE_FLEX_SHARED_OBJECT: 0x10,
+	RTMP_MESSAGE_TYPE_FLEX_MESSAGE:       0x11,
+	RTMP_MESSAGE_TYPE_INFO:               0x12,
+	RTMP_MESSAGE_TYPE_SHARED_OBJECT:      0x13,
+	RTMP_MESSAGE_TYPE_INVOKE:             0x14,
+	RTMP_MESSAGE_TYPE_FLASH_VIDEO:        0x16,
 });
 RTMPMessage.prototype.__defineGetter__('lastChunk', function() {
 	return (this.chunks.length) ? this.chunks[this.chunks.length-1] : null;
@@ -45,8 +46,23 @@ RTMPMessage.prototype.__defineGetter__('messageHeader', function() {
 });
 RTMPMessage.prototype.__defineGetter__('data', function() {
 	if (this.messageHeader.messageType == RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE) {
-		this.amf = new AMF(this.rawData);
-		return this.amf;
+		// TODO: create RTMPCommand class to parse and/or handle this
+		var data = this.rawData;
+		var obj  = {};
+		var commandNameParser = new AMF.AMFDeserialiser(data);
+		obj.commandName = commandNameParser.read();
+		data = data.slice(commandNameParser.byteLength);
+		var transactionIdParser = new AMF.AMFDeserialiser(data);
+		obj.transactionId = transactionIdParser.read();
+		data = data.slice(transactionIdParser.byteLength);
+		var commandObjParser = new AMF.AMFDeserialiser(data);
+		obj.commandObj = commandObjParser.read();
+		data = data.slice(commandObjParser.byteLength);
+		if (obj.commandName == "_error") {
+			var argumentsParser = new AMF.AMFDeserialiser(data);
+			obj.arguments = argumentsParser.read();
+		}
+		return obj;
 	} else {
 		return this.rawData;
 	}
@@ -60,6 +76,10 @@ RTMPMessage.prototype.__defineGetter__('rawData', function() {
 	this._rawData = Buffer.concat(data); //TODO: concat is time & memory consuming, array of buffers or stream I/O would be better
 	return this._rawData; 
 });
+
+RTMPMessage.prototype.sendData = function(data) {
+
+}
 
 // Warning! because RTMPChunk reaches in and uses these values, the order of modification/access is important
 RTMPMessage.prototype.parseData = function(data) {
