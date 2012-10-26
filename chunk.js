@@ -6,9 +6,12 @@ Buffer.prototype.readUint24BE = function(offset) {
 }
 
 var RTMPChunk = module.exports = function(buffer, parentMessage) {
-	this.buffer = buffer;
+	this.buffer = buffer; // parameter should be moved to read/write functions
 	this.message = parentMessage;
 }
+// TODO: getters and setters should all be rewritten so that they affect only the internal state variables
+// and don't depend on a buffer. the internal state should then be written or read to/from a buffer with a 
+// read and write function, similar to the AMF library
 RTMPChunk.prototype.__defineGetter__('basicHeader', function() {
 	if (this._basicHeader) return this._basicHeader;
 	var chunkType = (this.buffer.readUInt8(0))>>6;
