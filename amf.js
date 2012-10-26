@@ -1,3 +1,5 @@
+var util = require('util')
+
 function defineConstant(obj, name, value) {
     obj.__defineGetter__(name, function() { return value; });
 }
@@ -10,7 +12,7 @@ var AMF = module.exports = function( buf ) {
     this.buf = buf;
 };
 
-defineConstants({
+defineConstants(AMF, {
     AMF_NUMBER:         0,
     AMF_BOOLEAN:        1,
     AMF_STRING:         2,
@@ -31,6 +33,187 @@ defineConstants({
     AMF_AVMPLUS:        17,
     AMF_INVALID:        0xff
 })
+
+var normaliseType = function(data) {
+    if (data instanceof AMFType)
+        return data
+    if (typeof value == 'string')
+        return new AMFString(data)
+    if (typeof value == 'number')
+        return new AMFNumber(data)
+    if (typeof value == 'object')
+        return new AMFObject(data)
+    throw new Error("No mapping to AMF type", typeof data, data);
+}
+
+var AMFType = function() {}
+var AMFNumber = function(data) {
+    if (data) {
+        if (typeof data == "number")
+            this.value = data;
+        else
+            throw new Error("ArgumentError: Argument must be a number");
+    }
+}
+util.inherits(AMFNumber, AMFType);
+defineConstant(AMFNumber.prototype, 'type', AMF.AMF_NUMBER)
+AMFNumber.prototype.__defineGetter__('byteLength', function() {
+    return 8;
+})
+AMFNumber.prototype.read = function(buf) {
+    return (this.value = buf.readDoubleBE(0));
+}
+AMFNumber.prototype.write = function(buf) {
+    buf.writeDoubleBE(this.value, 0);
+}
+var AMFBoolean = function(data) {
+    if (data) {
+        if (typeof data == "boolean")
+            this.value = data;
+        else
+            throw new Error("ArgumentError: Argument must be a boolean");
+    }
+}
+util.inherits(AMFBoolean, AMFType);
+defineConstant(AMFBoolean.prototype, 'type', AMF.AMF_BOOLEAN)
+AMFBoolean.prototype.__defineGetter__('byteLength', function() {
+    return 1;
+})
+AMFBoolean.prototype.read = function(buf) {
+    return (this.value = Boolean(buf.readUInt8(0)));
+}
+AMFBoolean.prototype.write = function(buf) {
+    buf.writeUInt8(this.value, 0);
+}
+var AMFString = function(data) {
+    if (data) {
+        if (typeof data == "string")
+            this.value = data;
+        else
+            throw new Error("ArgumentError: Argument must be a string")
+    }
+}
+util.inherits(AMFString, AMFType);
+defineConstant(AMFString.prototype, 'type', AMF.AMF_STRING)
+AMFString.prototype.__defineGetter__('byteLength', function() {
+    return Buffer.byteLength(this.value) + 2;
+})
+AMFString.prototype.read = function(buf) {
+    var len = buf.readUInt16BE(0);
+    return (this.value = buf.toString('utf8', 2, 2+len));
+}
+AMFString.prototype.write = function(buf) {
+    buf.writeUInt16BE(Buffer.byteLength(this.value), 0);
+    buf.write(this.value, 2);
+}
+var AMFObject = function(data) {
+    if (data) {
+        if (typeof data == "object")
+            this.value = data
+        else
+            throw new Error("ArgumentError: Argument must be a object")
+    }
+}
+util.inherits(AMFObject, AMFType);
+defineConstant(AMFObject.prototype, 'type', AMF.AMF_OBJECT)
+AMFObject.prototype.__defineGetter__('byteLength', function() {
+    var byteLength = 0;
+    for (var k in this.value) {
+        if (!this.value.hasOwnProperty(k)) continue;
+        var type = normaliseType(data[k]);
+        byteLength += 2;                    // 2 byte key length 
+        byteLength += Buffer.byteLength(k); // key name byte length
+        byteLength += type.byteLength;      // type length
+    }
+    byteLength += 3; // 3 byte object end marker
+    return byteLength;
+})
+AMFObject.prototype.read = function(buf) {
+    var offset = 0;
+    this.value = {};
+    while(buf.readUInt16BE(offset) !== 0 && buf.readUInt8(offset+2) != AMF.AMF_OBJECT_END) {
+        var keyLen = buf.readUInt16BE(offset);
+        offset += 2;
+        var key = buf.toString('utf8', offset, offset += keyLen);
+        var des = new AMF.AMFDeserialiser(buf.slice(offset));
+        var data = des.getType();
+        this.value[key] = data;
+        offset += des.byteLength;
+    }
+    return this.value;
+}
+AMFObject.prototype.write = function(buf) {
+    var offset = 0;
+    for (var k in this.value) {
+        if (!this.value.hasOwnProperty(k)) continue;
+        var type = normaliseType(data[k]);
+        buf.writeUInt16BE(Buffer.byteLength(k), offset);
+        offset += 2;
+        buf.write(k, offset);
+        offset += Buffer.byteLength(k);
+        type.write(buf.slice(offset, offset += type.byteLength));
+    }
+    buf.writeUint16BE(0, offset);
+    offset += 2;
+    buf.writeUInt8(AMF.AMF_OBJECT_END, offset);
+}
+var AMFNull = function() {
+    this.value = null;
+}
+util.inherits(AMFNull, AMFType);
+defineConstant(AMFNull.prototype, 'type', AMF.AMF_NULL)
+AMFNull.prototype.__defineGetter__('byteLength', function() {
+    return 0;
+})
+AMFNull.prototype.read = function() {
+    return null;
+}
+AMFNull.prototype.write = function() {}
+
+var amfTypeMap = {}
+    amfTypeMap[AMF.AMF_NUMBER]=AMFNumber;
+    amfTypeMap[AMF.AMF_BOOLEAN]=AMFBoolean;
+    amfTypeMap[AMF.AMF_STRING]=AMFString;
+    amfTypeMap[AMF.AMF_OBJECT]=AMFObject;
+    amfTypeMap[AMF.AMF_NULL]=AMFNull;
+
+AMF.AMFSerialiser = function(data) {
+    this.value = data;
+}
+AMF.AMFSerialiser.prototype.__defineGetter__('byteLength', function() {
+    var type = normaliseType(this.value)
+    return type.byteLength + 1; // +1 for type marker
+})
+AMF.AMFSerialiser.prototype.write = function(buf) {
+    ///if (!buf)
+    ///    buf = new Buffer(this.byteLength)
+    var type = normaliseType(this.value)
+
+    // write type marker
+    buf.writeUInt8(type.type, 0);
+    type.write(buf.slice(1));
+    ///return buf;
+}
+
+AMF.AMFDeserialiser = function(buf) {
+    this.buf = buf;
+}
+AMF.AMFDeserialiser.prototype.__defineGetter__('byteLength', function() {
+    return this.getType().byteLength + 1; // +1 for type marker
+})
+AMF.AMFDeserialiser.prototype.getType = function() {
+    var typeMarker = this.buf.readUInt8(0);
+    if (!amfTypeMap.hasOwnProperty(typeMarker))
+        throw new Error("Undecodable type: " + typeMarker);
+    var type = new amfTypeMap[typeMarker]();
+    type.read(this.buf.slice(1));
+    return type;
+}
+AMF.AMFDeserialiser.prototype.read = function() {
+    return this.getType().value;
+}
+
+/** old **/
 
 AMF.prototype.writeInt16 = function( value, offset ) {
     offset = offset || 0;
