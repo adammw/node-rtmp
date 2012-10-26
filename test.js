@@ -22,5 +22,5 @@ var rtmp = RTMPClient.connect('cp98428.edgefcs.net', function() {
 	rtmp.sendPacket(packet);
 });
 rtmp.on('message', function(message) {
-    console.log("GOT RTMP MESSAGE!", message);
+    console.log("GOT RTMP MESSAGE!", "Type:",message.messageHeader.messageType, message.data);
 });

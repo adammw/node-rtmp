@@ -21,7 +21,7 @@ RTMPChunk.prototype.__defineGetter__('basicHeader', function() {
 		chunkStreamId = this.buffer.readUInt8(2)*256 + this.buffer.readUInt8(1) + 64;
 		headerLength = 3;
 	} else if (chunkStreamId == 2) { // low-level protocol message ?
-		//TODO
+		//TODO: Set Chunk Size / Abort Message 
 	} 
 	this._basicHeader = {
 		chunkType: chunkType,
@@ -128,8 +128,8 @@ RTMPChunk.prototype.__defineGetter__('chunkData', function() {
 	// therefore somehow the chunks need to relate together to a message, and the 
 	// message needs to know how many bytes (of payload) are remaining
 	//
-	//return this.buffer.splice(this.chunkDataOffset,???);
-	return this.buffer.splice(this.chunkDataOffset,this.chunkLength)
+	//return this.buffer.slice(this.chunkDataOffset,???);
+	return this.buffer.slice(this.chunkDataOffset,this.chunkLength)
 });
 RTMPChunk.prototype.__defineGetter__('byteLength', function() {
 	return this.chunkDataOffset + this.chunkLength;

@@ -43,6 +43,7 @@ RTMPClient.prototype.onData = function(data) {
 
 RTMPClient.prototype.onMessage = function() {
 	this.emit("message", this.message);
+	// TODO: parse AMF
 }
 
 //TODO: update to chunk/message system
