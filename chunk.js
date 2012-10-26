@@ -1,10 +1,17 @@
-var RTMPChunk = module.exports = function(buffer) {
+var _ = require('underscore') // for _.clone
+
+// Monkey-patch Buffer
+Buffer.prototype.readUint24BE = function(offset) {
+	return (this.readUInt8(offset) << 16) + (this.readUInt8(offset+1) << 8) + this.readUInt8(offset+2);
+}
+
+var RTMPChunk = module.exports = function(buffer, parentMessage) {
 	this.buffer = buffer;
+	this.message = parentMessage;
 }
 RTMPChunk.prototype.__defineGetter__('basicHeader', function() {
 	if (this._basicHeader) return this._basicHeader;
-
-	var chunkType = this.buffer.readUInt8(0) & (3<<6);
+	var chunkType = (this.buffer.readUInt8(0))>>6;
 	var chunkStreamId = this.buffer.readUInt8(0) & (0x3f);
 	var headerLength = 1;
 	if (chunkStreamId == 0) {
@@ -52,41 +59,68 @@ RTMPChunk.prototype.__defineGetter__('messageHeaderOffset', function() {
 });
 RTMPChunk.prototype.__defineGetter__('messageHeader', function() {
 	if (this._messageHeader) return this._messageHeader;
-	var messageLength = 0;
-	// To properley parse >0 we need access to the previous chunk
+	var messageHeader = (this.message.lastChunk && this.message.lastChunk != this) ? _.clone(this.message.lastChunk.messageHeader) : {};
+	var offset = this.messageHeaderOffset;
 	switch(this.basicHeader.chunkType) {
 		case 0:
-			//TODO parsing
-			messageLength = 11;
+			// Type-0 has absolute timestamp
+			messageHeader.timestamp = this.buffer.readUint24BE(offset);
+			offset += 3;
+			messageHeader.messageLength = this.buffer.readUint24BE(offset);
+			offset += 3;
+			messageHeader.messageType = this.buffer.readUInt8(offset++);
+			messageHeader.messageStream = this.buffer.readUInt32BE(offset);
+			offset += 4;
 			break;
 		case 1:
-			//TODO parsing
-			messageLength = 7;
+			// Type-1/2 have relative timestamp
+			messageHeader.timestampDelta = this.buffer.readUint24BE(offset);
+			messageHeader.timestamp += messageHeader.timestampDelta
+			offset += 3
+			messageHeader.messageLength = this.buffer.readUint24BE(offset);
+			offset += 3
+			messageHeader.messageType = this.buffer.readUInt8(offset++);
 			break;
 		case 2: 
-			//TODO parsing
-			messageLength = 3;
+			messageHeader.timestampDelta = this.buffer.readUint24BE(offset); 
+			offset += 3
+			messageHeader.timestamp += messageHeader.timestampDelta
 			break;
 		case 3:
 		default:
-			//??
+			messageHeader.timestamp += (messageHeader.timestampDelta) ? messageHeader.timestampDelta : messageHeader.timestamp;
+			break;
+
 	}
-	this._messageHeader = {
-		byteLength: messageLength
-	}
+	messageHeader.byteLength = offset - this.messageHeaderOffset;
+	this._messageHeader = messageHeader;
 	return this._messageHeader;
 });
+//TODO: messageHeader setter
 RTMPChunk.prototype.__defineGetter__('extendedTimestampOffset', function() {
 	return this.messageHeaderOffset + this.messageHeader.byteLength;
 });
 RTMPChunk.prototype.__defineGetter__('extendedTimestamp', function() {
 	// if the normal timestamp is 0xffffff then this is used and is 4 bytes,
 	// otherwise it is 0 bytes and unused
-	//TODO
+	if (this.messageHeader.timestamp != 0xffffff) {
+		return {byteLength: 0};
+	} else {
+		return {
+			extendedTimestamp: this.buffer.readUInt32BE(this.extendedTimestampOffset),
+			byteLength: 4
+		};
+	}
 });
+//TODO: extendedTimestamp setter (will need to call messageHeader setter to change timestamp/delta field to 0xffffff)
 RTMPChunk.prototype.__defineGetter__('chunkDataOffset', function() {
 	return this.extendedTimestampOffset + this.extendedTimestamp.byteLength;
 });
+RTMPChunk.prototype.__defineGetter__('chunkLength', function() {
+	if (!this.hasOwnProperty('_chunkLength'))
+		this._chunkLength = (this.message.hasOwnProperty('bytesRemaining')) ? Math.min(this.message.chunkSize,this.message.bytesRemaining) : this.message.chunkSize;
+	return this._chunkLength
+})
 RTMPChunk.prototype.__defineGetter__('chunkData', function() {
 	//chunk size is the maximum chunk size for all but the last chunk of a message 
 	//(or the only chunk for a small message) which has the remaining bytes
@@ -95,4 +129,8 @@ RTMPChunk.prototype.__defineGetter__('chunkData', function() {
 	// message needs to know how many bytes (of payload) are remaining
 	//
 	//return this.buffer.splice(this.chunkDataOffset,???);
+	return this.buffer.splice(this.chunkDataOffset,this.chunkLength)
+});
+RTMPChunk.prototype.__defineGetter__('byteLength', function() {
+	return this.chunkDataOffset + this.chunkLength;
 });
