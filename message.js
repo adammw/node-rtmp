@@ -1,5 +1,7 @@
 var events = require('events'),
+	os = require('os'),
 	util = require('util');
+var log = require('./log')
 var AMF = require('./amf')
 var RTMPChunk = require('./chunk');
 
@@ -77,15 +79,51 @@ RTMPMessage.prototype.__defineGetter__('rawData', function() {
 	return this._rawData; 
 });
 
-RTMPMessage.prototype.sendData = function(data) {
+RTMPMessage.prototype.sendData = function(channel, messageType, data) {
+	//TODO: this is unusual compared to the rest of the library as it doesn't use setters/getters
+	// in favour of function arguments
+	// if possible, it should be normalised
+	var byteLength = 0;
+	for (var start = 0; start < data.length; start += this.chunkSize) {
+		var chunk = new RTMPChunk(this, this.lastChunk);
+		chunk.basicHeader = {
+			chunkType: 0,
+			chunkStreamId: channel
+		}
+		chunk.messageHeader = {
+			timestamp: 0, //os.uptime() * 1000,
+			messageLength: data.length,
+			messageType: messageType,
+			messageStream: 0
+		}
+		chunk.chunkData = data.slice(start, Math.min(start+this.chunkSize, data.length));
+		//var chunkBuf = chunk.write();
+		//log.logHex(chunkBuf)
+		//chunk.xxxxxxx = xxxxx
+		byteLength += chunk.byteLength;
+		this.chunks.push(chunk);
+	}
 
+	var buf = new Buffer(byteLength);
+	var buf_offset = buf.slice(0);
+	for (var i = 0; i < this.chunks.length; i++) {
+		var chunk = this.chunks[i];
+		var tmp_buf = buf_offset.slice(0, chunk.byteLength);
+		chunk.write(tmp_buf);
+		console.log('chunk created',tmp_buf.length,'bytes', 'chunk len', chunk.byteLength)
+		log.logHex(tmp_buf);
+		buf_offset = buf_offset.slice(chunk.byteLength);
+	}
+	return buf;
+	//chunk.write(buf);
 }
 
 // Warning! because RTMPChunk reaches in and uses these values, the order of modification/access is important
 RTMPMessage.prototype.parseData = function(data) {
 	// TODO: support where entire message doesn't fit within one data event, hence chunk data needs to be concatenated
 	do {
-		var chunk = new RTMPChunk(data, this);
+		var chunk = new RTMPChunk(this, this.lastChunk);
+		chunk.read(data);
 
 		// Set number of bytes remaining in message
 		if (!this.hasOwnProperty('bytesRemaining'))
