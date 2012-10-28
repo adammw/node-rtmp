@@ -37,13 +37,15 @@ defineConstants(AMF, {
 var normaliseType = function(data) {
     if (data instanceof AMFType)
         return data
-    if (typeof value == 'string')
+    if (typeof data == 'string')
         return new AMFString(data)
-    if (typeof value == 'number')
+    if (typeof data == 'number')
         return new AMFNumber(data)
-    if (typeof value == 'object')
+    if (typeof data == 'object')
         return new AMFObject(data)
-    throw new Error("No mapping to AMF type", typeof data, data);
+    if (typeof data == 'boolean')
+        return new AMFBoolean(data)
+    throw new Error("No mapping to AMF type (type: " + typeof data + ")");
 }
 
 var AMFType = function() {}
@@ -67,7 +69,7 @@ AMFNumber.prototype.write = function(buf) {
     buf.writeDoubleBE(this.value, 0);
 }
 var AMFBoolean = function(data) {
-    if (data) {
+    if (data !== undefined) {
         if (typeof data == "boolean")
             this.value = data;
         else
@@ -83,7 +85,7 @@ AMFBoolean.prototype.read = function(buf) {
     return (this.value = Boolean(buf.readUInt8(0)));
 }
 AMFBoolean.prototype.write = function(buf) {
-    buf.writeUInt8(this.value, 0);
+    buf.writeUInt8(Number(this.value), 0);
 }
 var AMFString = function(data) {
     if (data) {
@@ -120,7 +122,7 @@ AMFObject.prototype.__defineGetter__('byteLength', function() {
     var byteLength = 0;
     for (var k in this.value) {
         if (!this.value.hasOwnProperty(k)) continue;
-        var type = normaliseType(data[k]);
+        var type = normaliseType(this.value[k]);
         byteLength += 2;                    // 2 byte key length 
         byteLength += Buffer.byteLength(k); // key name byte length
         byteLength += type.byteLength;      // type length
@@ -146,14 +148,14 @@ AMFObject.prototype.write = function(buf) {
     var offset = 0;
     for (var k in this.value) {
         if (!this.value.hasOwnProperty(k)) continue;
-        var type = normaliseType(data[k]);
+        var type = normaliseType(this.value[k]);
         buf.writeUInt16BE(Buffer.byteLength(k), offset);
         offset += 2;
         buf.write(k, offset);
         offset += Buffer.byteLength(k);
         type.write(buf.slice(offset, offset += type.byteLength));
     }
-    buf.writeUint16BE(0, offset);
+    buf.writeUInt16BE(0, offset);
     offset += 2;
     buf.writeUInt8(AMF.AMF_OBJECT_END, offset);
 }
