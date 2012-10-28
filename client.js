@@ -3,6 +3,7 @@ var net = require('net'),
 	util = require('util'),
 	os = require('os');
 
+var AMF = require('./amf');
 var RTMPHandshake = require('./handshake');
 var RTMPMessage = require('./message');
 
@@ -56,35 +57,51 @@ RTMPClient.prototype.onMessage = function() {
 	}
 }
 
-//TODO: update to chunk/message system and/or something that abstracts away 
-// the commandName/transactionId/commandObj details currently in RTMPMessage
-RTMPClient.prototype.sendPacket = function(packet) {
+RTMPClient.prototype.sendInvoke = function(commandName, transactionId, commandObj, invokeArguments) {
+	// TODO: create RTMPInvoke class to parse and/or handle this (that inherits from a general RTMPPacket class)
+	var commandNameSerialiser = new AMF.AMFSerialiser(commandName);
+    var transactionIdSerialiser = new AMF.AMFSerialiser(transactionId);
+    var commandObjSerialiser = new AMF.AMFSerialiser(commandObj);
+    if (invokeArguments !== undefined) {
+    	var invokeArgumentsSerialiser = new AMF.AMFSerialiser(commandObj);
+    }
+
+    var amfLength = commandNameSerialiser.byteLength + transactionIdSerialiser.byteLength + commandObjSerialiser.byteLength + ((invokeArguments !== undefined) ? invokeArgumentsSerialiser.byteLength : 0);
+    var amfOffset = 0;
+    var amfData = new Buffer(amfLength);
+    commandNameSerialiser.write(amfData.slice(amfOffset, commandNameSerialiser.byteLength));
+    amfOffset += commandNameSerialiser.byteLength;
+    transactionIdSerialiser.write(amfData.slice(amfOffset, amfOffset + transactionIdSerialiser.byteLength));
+    amfOffset += transactionIdSerialiser.byteLength
+    commandObjSerialiser.write(amfData.slice(amfOffset, amfOffset + commandObjSerialiser.byteLength));
+    amfOffset += commandObjSerialiser.byteLength;
+    if (invokeArguments !== undefined) {
+    	invokeArgumentsSerialiser.write(amfData.slice(amfOffset, amfOffset + invokeArgumentsSerialiser.byteLength));
+    }
+	
+	this.sendPacket(0x03, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, amfData);	
+}
+
+RTMPClient.prototype.sendPacket = function(channel, messageType, data) {
+	//TODO: Check if given a RTMPPacket object that specifies channel, messageType, data inside the object (e.g. RTMPInvoke)
+
 	// If we aren't handshaken, then defer sending until we have
 	if (!this.handshake || this.handshake.state != RTMPHandshake.STATE_HANDSHAKE_DONE) {
-		this.on('connect', (function(){
-			this.sendPacket(packet);
+		this.on('connect', (function(){ // TODO: test this works correctly and does not end up with undefined parameters
+			this.sendPacket(channel, messageType, data);
 		}).bind(this));
 		return;
 	}
 
-	var chunks = packet.serialize();
-    this.socket.setNoDelay(true);
-    log("sending RTMP packet...");
-
-    //TODO: this is ugly.. fix it
-    for (var i = 1; i < chunks.length; i+= 2) {
-        log.logHex(chunks[i-1]);
-        log.logHex(chunks[i]);
-        var buf = new Buffer(chunks[i-1].length + chunks[i].length);
-        chunks[i-1].copy(buf);
-        chunks[i].copy(buf, chunks[i-1].length);
-        this.socket.write(buf);
-    }
+	var message = new RTMPMessage();
+    var rawData = message.sendData(channel, messageType, data);
+    log("sending RTMP packet...",  "(" + rawData.byteLength + " bytes)");
+    this.socket.write(rawData);
+    log.logHex(rawData);
 }
 
-//TODO: remove when we have updated to chunk/message system
-RTMPClient.prototype.sendRawPacket = function(packet) {
-	log("sending raw RTMP packet...", "(" + packet.length + " bytes)");
+RTMPClient.prototype.sendRawData = function(packet) {
+	log("sending raw data...", "(" + packet.length + " bytes)");
 	log.logHex(packet);
 	this.socket.write(packet);
 }
