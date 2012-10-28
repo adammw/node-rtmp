@@ -41,9 +41,9 @@ log.logHex = function( data ) {
 		off = BP_GRAPH + n + ((n >= 8)?1:0);
 
 		if ( isprint( data[i] )) {
-			line[BP_GRAPH + n] = data[i];
+			line[BP_GRAPH + n + ((n >= 8)?1:0)] = data[i];
 		} else {
-			line[BP_GRAPH + n] = '.'.charCodeAt();
+			line[BP_GRAPH + n + ((n >= 8)?1:0)] = '.'.charCodeAt();
 		}
     }
     process.stdout.write(line.toString()+"\n");
