@@ -56,7 +56,8 @@ RTMPClient.prototype.onMessage = function() {
 	}
 }
 
-//TODO: update to chunk/message system
+//TODO: update to chunk/message system and/or something that abstracts away 
+// the commandName/transactionId/commandObj details currently in RTMPMessage
 RTMPClient.prototype.sendPacket = function(packet) {
 	// If we aren't handshaken, then defer sending until we have
 	if (!this.handshake || this.handshake.state != RTMPHandshake.STATE_HANDSHAKE_DONE) {
@@ -79,6 +80,13 @@ RTMPClient.prototype.sendPacket = function(packet) {
         chunks[i].copy(buf, chunks[i-1].length);
         this.socket.write(buf);
     }
+}
+
+//TODO: remove when we have updated to chunk/message system
+RTMPClient.prototype.sendRawPacket = function(packet) {
+	log("sending raw RTMP packet...", "(" + packet.length + " bytes)");
+	log.logHex(packet);
+	this.socket.write(packet);
 }
 
 RTMPClient.connect = function(host, port, connectListener) {
