@@ -125,6 +125,7 @@ AMFObject.prototype.__defineGetter__('byteLength', function() {
         var type = normaliseType(this.value[k]);
         byteLength += 2;                    // 2 byte key length 
         byteLength += Buffer.byteLength(k); // key name byte length
+        byteLength++;                       // 1 byte type id
         byteLength += type.byteLength;      // type length
     }
     byteLength += 3; // 3 byte object end marker
@@ -148,12 +149,12 @@ AMFObject.prototype.write = function(buf) {
     var offset = 0;
     for (var k in this.value) {
         if (!this.value.hasOwnProperty(k)) continue;
-        var type = normaliseType(this.value[k]);
         buf.writeUInt16BE(Buffer.byteLength(k), offset);
         offset += 2;
         buf.write(k, offset);
         offset += Buffer.byteLength(k);
-        type.write(buf.slice(offset, offset += type.byteLength));
+        var ser = new AMF.AMFSerialiser(this.value[k]);
+        ser.write(buf.slice(offset, offset += ser.byteLength));
     }
     buf.writeUInt16BE(0, offset);
     offset += 2;
