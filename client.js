@@ -95,7 +95,7 @@ RTMPClient.prototype.sendPacket = function(channel, messageType, data) {
 
 	var message = new RTMPMessage();
     var rawData = message.sendData(channel, messageType, data);
-    log("sending RTMP packet...",  "(" + rawData.byteLength + " bytes)");
+    log("sending RTMP packet...",  "(" + rawData.length + " bytes)");
     this.socket.write(rawData);
     log.logHex(rawData);
 }
